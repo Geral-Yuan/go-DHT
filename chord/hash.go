@@ -5,7 +5,7 @@ import (
 	"math/big"
 )
 
-const M = 160 // the size of the hash table is 2 << M
+const M uint = 160 // the size of the hash table is 1 << M
 
 func Hash(addr string) *big.Int {
 	hash := sha1.New()

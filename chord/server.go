@@ -16,23 +16,23 @@ type NodeServer struct {
 
 func (ns *NodeServer) Init(node *Node) {
 	ns.server = rpc.NewServer()
-	ns.server.Register(RPC_Node{node})
+	ns.server.Register(&RPC_Node{node})
 }
 
 func (ns *NodeServer) TurnOn(netStr, addr string) error {
 	var err error
 	ns.listener, err = net.Listen(netStr, addr)
 	if err != nil {
-		logrus.Errorf("Error <func TurnOn()> [%s] listen error: %v\n", addr, err)
+		logrus.Errorf("Error <func TurnOn()> node [%s] listen error: %v", getPortFromIP(addr), err)
 		return err
 	}
 	ns.shutdown.Store(false)
 	go func() {
 		err = ns.DialAccept()
 		if ns.shutdown.Load() {
-			logrus.Infof("Info <func TurnOn()> server [%s] shutdown\n", addr)
+			logrus.Infof("Info <func TurnOn()> node [%s] shutdown", getPortFromIP(addr))
 		} else {
-			logrus.Errorf("Error <func TurnOn()> server [%s] accept error: %v\n", addr, err)
+			logrus.Errorf("Error <func TurnOn()> node [%s] accept error: %v", getPortFromIP(addr), err)
 		}
 	}()
 	return nil

@@ -23,22 +23,23 @@ func GetClient(netStr, addr string) (*rpc.Client, error) {
 			client := rpc.NewClient(conn)
 			return client, nil
 		}
-		logrus.Errorf("Error <func GetClient()> dial [%s] error: %v\n", addr, err)
+		logrus.Errorf("Error <func GetClient()> dial node [%s] error: %v", getPortFromIP(addr), err)
 		time.Sleep(dialFailSleepDuration)
 	}
 	return nil, err
 }
 
-func RemoteCall(netStr, addr, method string, args, reply interface{}) error {
+func (node *Node) RemoteCall(netStr, addr, method string, args, reply interface{}) error {
 	client, err := GetClient(netStr, addr)
 	if err != nil {
-		logrus.Errorf("Error <func RemoteCall()> getClient [%s] error: %v\n", addr, err)
+		logrus.Errorf("Error <func RemoteCall()> getClient of node [%s] error: %v", getPortFromIP(addr), err)
 		return err
 	}
+	logrus.Infof("Info <func RemoteCall()> node [%s] RemoteCall node [%s] method [%s]", node.getPort(), getPortFromIP(addr), method)
 	err = client.Call(method, args, reply)
 	if err != nil {
 		client.Close()
-		logrus.Errorf("Error <func RemoteCall()> call method [%s] error: %v\n", method, err)
+		logrus.Errorf("Error <func RemoteCall()> node [%s] call method [%s] error: %v", node.getPort(), method, err)
 	}
 	return err
 }
