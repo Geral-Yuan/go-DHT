@@ -21,3 +21,23 @@ func (rpc *RPC_Node) Stablilize(_ struct{}, _ *struct{}) error {
 func (rpc *RPC_Node) Notify(n SingleNode, _ *struct{}) error {
 	return rpc.node_ptr.notify(n)
 }
+
+func (rpc *RPC_Node) PutData(pair Pair, _ *struct{}) error {
+	return rpc.node_ptr.putData(pair)
+}
+
+func (rpc *RPC_Node) PutBackupData(pair Pair, _ *struct{}) error {
+	return rpc.node_ptr.putBackupData(pair)
+}
+
+func (rpc *RPC_Node) GetData(key string, value *string) error {
+	return rpc.node_ptr.getData(key, value)
+}
+
+func (rpc *RPC_Node) DeleteData(key string, _ *struct{}) error {
+	return rpc.node_ptr.deleteData(key)
+}
+
+func (rpc *RPC_Node) DeleteBackupData(key string, _ *struct{}) error {
+	return rpc.node_ptr.deleteBackupData(key)
+}

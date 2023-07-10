@@ -1,6 +1,7 @@
 package chord
 
 import (
+	"fmt"
 	"math/big"
 	"os"
 	"strings"
@@ -105,17 +106,42 @@ func (node *Node) ForceQuit() {
 
 /*Init method Put() for interface dhtNode*/
 func (node *Node) Put(key string, value string) bool {
-	return false
+	id := Hash(key)
+	var suc SingleNode
+	node.find_successor(id, &suc)
+	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.PutData", Pair{key, value}, &struct{}{})
+	if err != nil {
+		logrus.Errorf("Error <func Put()> node [%s] call [%s] method [RPC_Node.PutData] error: %v", node.getPort(), suc.getPort(), err)
+		return false
+	}
+	return true
 }
 
 /*Init method Get() for interface dhtNode*/
 func (node *Node) Get(key string) (bool, string) {
-	return false, ""
+	id := Hash(key)
+	var suc SingleNode
+	node.find_successor(id, &suc)
+	var value string
+	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.GetData", key, &value)
+	if err != nil {
+		logrus.Errorf("Error <func Get()> node [%s] call [%s] method [RPC_Node.GetData] error: %v", node.getPort(), suc.getPort(), err)
+		return false, ""
+	}
+	return true, value
 }
 
 /*Init method Delete() for interface dhtNode*/
 func (node *Node) Delete(key string) bool {
-	return false
+	id := Hash(key)
+	var suc SingleNode
+	node.find_successor(id, &suc)
+	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteData", key, &struct{}{})
+	if err != nil {
+		logrus.Errorf("Error <func Delete()> node [%s] call [%s] method [RPC_Node.DeleteData] error: %v", node.getPort(), suc.getPort(), err)
+		return false
+	}
+	return true
 }
 
 // following are helper functions for interface methods and RPC methods
@@ -210,8 +236,8 @@ func (node *Node) closest_preceding_finger(id *big.Int) SingleNode {
 }
 
 func (node *Node) stablilize() error {
-	logrus.Infof("Info <func stablilize()> node [%s] stabilize", node.getPort())
-	node.PrintNodeInfo()
+	logrus.Infof("Info <func stablilize()> node [%s] stablilize", node.getPort())
+	// node.PrintNodeInfo()
 	var suc, nSuc SingleNode
 	node.get_successor(&suc)
 	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.Get_predecessor", struct{}{}, &nSuc)
@@ -265,6 +291,63 @@ func (node *Node) maintainChord() {
 			time.Sleep(fixFingersInterval)
 		}
 	}()
+}
+
+func (node *Node) putData(pair Pair) error {
+	node.dataLock.Lock()
+	node.data[pair.Key] = pair.Value
+	node.dataLock.Unlock()
+	var suc SingleNode
+	node.get_successor(&suc)
+	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.PutBackupData", pair, &struct{}{})
+	if err != nil {
+		logrus.Errorf("Error <func putData()> node [%s] call [%s] method [RPC_Node.PutBackupData] error: %v", node.getPort(), suc.getPort(), err)
+		return err
+	}
+	return nil
+}
+
+func (node *Node) putBackupData(pair Pair) error {
+	node.backupDataLock.Lock()
+	node.backupData[pair.Key] = pair.Value
+	node.backupDataLock.Unlock()
+	return nil
+}
+
+func (node *Node) getData(key string, value *string) error {
+	node.dataLock.RLock()
+	*value = node.data[key]
+	node.dataLock.RUnlock()
+	return nil
+}
+
+func (node *Node) deleteData(key string) error {
+	node.dataLock.Lock()
+	_, ok := node.data[key]
+	delete(node.data, key)
+	node.dataLock.Unlock()
+	if !ok {
+		return fmt.Errorf("no key [%s] on node [%s]'s data", key, node.getPort())
+	}
+	var suc SingleNode
+	node.get_successor(&suc)
+	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteBackupData", key, &struct{}{})
+	if err != nil {
+		logrus.Errorf("Error <func deleteData()> node [%s] call [%s] method [RPC_Node.DeleteBackupData] error: %v", node.getPort(), suc.getPort(), err)
+		return err
+	}
+	return nil
+}
+
+func (node *Node) deleteBackupData(key string) error {
+	node.backupDataLock.Lock()
+	_, ok := node.backupData[key]
+	delete(node.backupData, key)
+	node.backupDataLock.Unlock()
+	if !ok {
+		return fmt.Errorf("no key [%s] on node [%s]'s backupData", key, node.getPort())
+	}
+	return nil
 }
 
 // helper functions for debugging
