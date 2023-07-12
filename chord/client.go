@@ -41,5 +41,8 @@ func (node *Node) RemoteCall(netStr, addr, method string, args, reply interface{
 		client.Close()
 		logrus.Errorf("Error <func RemoteCall()> node [%s] call method [%s] error: %v", node.getPort(), method, err)
 	}
+	if client != nil {
+		defer client.Close()
+	}
 	return err
 }
