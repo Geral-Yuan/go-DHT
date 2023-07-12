@@ -16,6 +16,7 @@ const (
 	stabilizeInterval         = 200 * time.Millisecond
 	fixFingersInterval        = 200 * time.Millisecond
 	updatePredecessorInterval = 200 * time.Millisecond
+	successorListLength       = 5
 )
 
 func init() {
@@ -30,19 +31,19 @@ type SingleNode struct {
 
 type Node struct {
 	SingleNode
-	online          atomic.Bool
-	server          NodeServer
-	data            map[string]string
-	dataLock        sync.RWMutex
-	backupData      map[string]string
-	backupDataLock  sync.RWMutex
-	successor       SingleNode
-	successorLock   sync.RWMutex
-	predecessor     SingleNode
-	predecessorLock sync.RWMutex
-	finger          [M]SingleNode
-	fingerLock      sync.RWMutex
-	fingerFixIndex  uint
+	online            atomic.Bool
+	server            NodeServer
+	data              map[string]string
+	dataLock          sync.RWMutex
+	backupData        map[string]string
+	backupDataLock    sync.RWMutex
+	successorList     [successorListLength]SingleNode
+	successorListLock sync.RWMutex
+	predecessor       SingleNode
+	predecessorLock   sync.RWMutex
+	finger            [M]SingleNode
+	fingerLock        sync.RWMutex
+	fingerFixIndex    uint
 }
 
 type Pair struct {
@@ -72,7 +73,7 @@ func (node *Node) Run() {
 /*Init method Create() for interface dhtNode*/
 func (node *Node) Create() {
 	logrus.Infof("Info <func Create()> node [%s] create a chord", node.getPort())
-	node.successor = SingleNode{node.Addr, node.ID}
+	node.successorList[0] = SingleNode{node.Addr, node.ID}
 	node.predecessor = SingleNode{node.Addr, node.ID}
 	var i uint
 	for i = 0; i < M; i++ {
@@ -209,13 +210,26 @@ func calcID(id *big.Int, i uint) *big.Int {
 }
 
 func (node *Node) get_successor(res *SingleNode) error {
-	node.successorLock.RLock()
-	*res = node.successor
-	node.successorLock.RUnlock()
-	if !node.Ping(res.Addr) {
-		err := fmt.Errorf("node [%s]'s successor is offline when trying to get it", node.getPort())
+	var i uint
+	node.successorListLock.RLock()
+	for i = 0; i < successorListLength; i++ {
+		if node.Ping(node.successorList[i].Addr) {
+			*res = node.successorList[0]
+			break
+		}
+	}
+	node.successorListLock.RUnlock()
+	if i == successorListLength {
+		err := fmt.Errorf("no node in [%s]'s successorList is online", node.getPort())
 		return err
 	}
+	return nil
+}
+
+func (node *Node) get_successorList(res *[successorListLength]SingleNode) error {
+	node.successorListLock.RLock()
+	*res = node.successorList
+	node.successorListLock.RUnlock()
 	return nil
 }
 
@@ -241,9 +255,13 @@ func (node *Node) get_finger_i(i uint, res *SingleNode) error {
 }
 
 func (node *Node) set_successor(n *SingleNode) error {
-	node.successorLock.Lock()
-	node.successor = *n
-	node.successorLock.Unlock()
+	var i uint
+	node.successorListLock.Lock()
+	for i = successorListLength - 1; i > 0; i++ {
+		node.successorList[i] = node.successorList[i-1]
+	}
+	node.successorList[0] = *n
+	node.successorListLock.Unlock()
 	return nil
 }
 
