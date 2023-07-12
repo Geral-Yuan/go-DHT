@@ -375,7 +375,9 @@ func (node *Node) notify(n SingleNode) error {
 		node.set_predecessor(&n)
 		var pre_data map[string]string
 		node.RemoteCall("tcp", n.Addr, "RPC_Node.GetDataList", struct{}{}, &pre_data)
+		node.backupDataLock.Lock()
 		node.backupData = pre_data
+		node.backupDataLock.Unlock()
 	}
 	return nil
 }
