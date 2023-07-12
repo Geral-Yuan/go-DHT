@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	stabilizeInterval         = 100 * time.Millisecond
-	fixFingersInterval        = 100 * time.Millisecond
+	stabilizeInterval         = 200 * time.Millisecond
+	fixFingersInterval        = 200 * time.Millisecond
 	updatePredecessorInterval = 200 * time.Millisecond
 )
 
@@ -101,20 +101,41 @@ func (node *Node) Join(addr string) bool {
 /*Init method Quit() for interface dhtNode*/
 func (node *Node) Quit() {
 	logrus.Infof("Info <func Quit()> node [%s] quit", node.getPort())
-	var suc, pre SingleNode
-	node.get_successor(&suc)
-	node.get_predecessor(&pre)
-	node.RemoteCall("tcp", pre.Addr, "RPC_Node.Set_successor", &suc, &struct{}{})
-	node.RemoteCall("tcp", suc.Addr, "RPC_Node.Set_predecessor", &pre, &struct{}{})
-	node_data, node_backup := make(map[string]string), make(map[string]string)
-	node.getDataList(&node_data)
-	node.getBackupDataList(&node_backup)
-	node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteBackupDataList", node_data, &struct{}{})
-	node.RemoteCall("tcp", suc.Addr, "RPC_Node.PutDataList", node_data, &struct{}{})
-	node.RemoteCall("tcp", suc.Addr, "RPC_Node.PutBackupDataList", node_backup, &struct{}{})
-	node.server.TurnOff()
-	node.clear()
+	node.PrintNodeInfo()
 	node.online.Store(false)
+	node.server.TurnOff()
+	var suc, pre SingleNode
+	err := node.get_successor(&suc)
+	if err != nil && suc.Addr != node.Addr {
+		logrus.Warnf("Warning! <func Quit()> %v", err)
+	}
+	// fmt.Printf("node [%s] quit step 0\n", node.getPort())
+	err = node.get_predecessor(&pre)
+	if err != nil && pre.Addr != node.Addr {
+		logrus.Warnf("Warning! <func Quit()> %v", err)
+	}
+	// fmt.Printf("node [%s] quit step 1\n", node.getPort())
+	if pre.Addr != node.Addr && suc.Addr != node.Addr {
+		if pre.Addr != "" {
+			node.RemoteCall("tcp", pre.Addr, "RPC_Node.Set_successor", &suc, &struct{}{})
+		} else {
+			logrus.Errorf("Error <func Quit()> fail to set successor of node [%s]'s unknown predecessor", node.getPort())
+		}
+	}
+	// fmt.Printf("node [%s] quit step 2\n", node.getPort())
+	if suc.Addr != node.Addr {
+		if pre.Addr != node.Addr {
+			node.RemoteCall("tcp", suc.Addr, "RPC_Node.Set_predecessor", &pre, &struct{}{})
+		}
+		node_data, node_backup := make(map[string]string), make(map[string]string)
+		node.getDataList(&node_data)
+		node.getBackupDataList(&node_backup)
+		node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteBackupDataList", node_data, &struct{}{})
+		node.RemoteCall("tcp", suc.Addr, "RPC_Node.PutDataList", node_data, &struct{}{})
+		node.RemoteCall("tcp", suc.Addr, "RPC_Node.PutBackupDataList", node_backup, &struct{}{})
+	}
+	// fmt.Printf("node [%s] quit step 3\n", node.getPort())
+	node.clear()
 }
 
 /*Init method ForceQuit() for interface dhtNode*/
@@ -122,7 +143,10 @@ func (node *Node) ForceQuit() {
 }
 
 func (node *Node) Ping(addr string) bool {
-	logrus.Infof("Info <func Ping()> node [%s] ping [%s]", node.getPort(), getPortFromIP(addr))
+	// logrus.Infof("Info <func Ping()> node [%s] ping [%s]", node.getPort(), getPortFromIP(addr))
+	if addr == node.Addr {
+		return node.online.Load()
+	}
 	err := node.RemoteCall("tcp", addr, "RPC_Node.IsOnline", struct{}{}, &struct{}{})
 	if err != nil {
 		return false
@@ -188,6 +212,10 @@ func (node *Node) get_successor(res *SingleNode) error {
 	node.successorLock.RLock()
 	*res = node.successor
 	node.successorLock.RUnlock()
+	if !node.Ping(res.Addr) {
+		err := fmt.Errorf("node [%s]'s successor is offline when trying to get it", node.getPort())
+		return err
+	}
 	return nil
 }
 
@@ -195,6 +223,13 @@ func (node *Node) get_predecessor(res *SingleNode) error {
 	node.predecessorLock.RLock()
 	*res = node.predecessor
 	node.predecessorLock.RUnlock()
+	if res.Addr == "" {
+		err := fmt.Errorf("node [%s] does not know its predecessor", node.getPort())
+		return err
+	} else if !node.Ping(res.Addr) {
+		err := fmt.Errorf("node [%s]'s predecessor is offline when trying to get it", node.getPort())
+		return err
+	}
 	return nil
 }
 
@@ -237,16 +272,27 @@ func (node *Node) clear() {
 
 // find the successor of id
 func (node *Node) find_successor(id *big.Int, res *SingleNode) error {
+	// logrus.Infof("Info <func find_successor()> node [%s] find successor of [%v]", node.getPort(), id)
 	if !node.online.Load() {
 		logrus.Infof("Info <func find_successor()> node [%s] offline", node.getPort())
 	}
 	var suc SingleNode
-	node.get_successor(&suc)
+	err := node.get_successor(&suc)
+	if err != nil {
+		logrus.Warnf("Warning! <func find_successor()> %v", err)
+		return err
+	}
 	if in_range(id, node.ID, suc.ID) || (id.Cmp(suc.ID) == 0) {
 		*res = suc
+		logrus.Infof("Info <func find_successor()> node [%s] find successor [%s]", node.getPort(), suc.getPort())
 		return nil
 	}
 	prec_finger := node.closest_preceding_finger(id)
+	if prec_finger.Addr == node.Addr {
+		*res = suc
+		return nil
+	}
+	// logrus.Infof("Info <func find_successor()> node [%s] remotecall [%s][%v] method [RPC_Node.Find_successor]", node.getPort(), prec_finger.getPort(), node.Ping(prec_finger.Addr))
 	return node.RemoteCall("tcp", prec_finger.Addr, "RPC_Node.Find_successor", id, res)
 }
 
@@ -255,7 +301,7 @@ func (node *Node) closest_preceding_finger(id *big.Int) SingleNode {
 		logrus.Infof("Info <func closest_preceding_finger()> node [%s] offline", node.getPort())
 	}
 	var i uint
-	for i = M - 1; i > 0; i-- {
+	for i = M - 1; i < M; i-- {
 		var f SingleNode
 		node.get_finger_i(i, &f)
 		if f.Addr == "" {
@@ -270,21 +316,27 @@ func (node *Node) closest_preceding_finger(id *big.Int) SingleNode {
 		}
 	}
 	var suc SingleNode
-	node.get_successor(&suc)
+	err := node.get_successor(&suc)
+	if err != nil {
+		logrus.Warnf("Warning! <func closest_preceding_finger()> %v", err)
+	}
 	return suc
 }
 
 func (node *Node) stabilize() error {
 	logrus.Infof("Info <func stabilize()> node [%s] stabilize", node.getPort())
-	// node.PrintNodeInfo()
 	var suc, nSuc SingleNode
-	node.get_successor(&suc)
-	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.Get_predecessor", struct{}{}, &nSuc)
+	err := node.get_successor(&suc)
+	if err != nil {
+		logrus.Warnf("Warning! <func stabilize()> %v", err)
+		return err
+	}
+	err = node.RemoteCall("tcp", suc.Addr, "RPC_Node.Get_predecessor", struct{}{}, &nSuc)
 	if err != nil {
 		logrus.Errorf("Error <func stabilize()> node [%s] call [%s] method [RPC_Node.Get_predecessor] error: %v", node.getPort(), suc.getPort(), err)
 		return err
 	}
-	if in_range(nSuc.ID, node.ID, suc.ID) {
+	if nSuc.Addr != "" && in_range(nSuc.ID, node.ID, suc.ID) {
 		node.set_successor(&nSuc)
 		node.set_finger_i(0, &nSuc)
 		node_data := make(map[string]string)
@@ -303,18 +355,29 @@ func (node *Node) stabilize() error {
 		node.RemoteCall("tcp", nSuc.Addr, "RPC_Node.PutDataList", suc_data, &struct{}{})
 		node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteDataList", suc_data, &struct{}{})
 	}
-	node.get_successor(&suc)
+	err = node.get_successor(&suc)
+	if err != nil {
+		logrus.Warnf("Warning! <func stabilize()> %v", err)
+		return err
+	}
 	err = node.RemoteCall("tcp", suc.Addr, "RPC_Node.Notify", SingleNode{node.Addr, node.ID}, &struct{}{})
 	if err != nil {
 		logrus.Errorf("Error <func stabilize()> node [%s] call [%s] method [RPC_Node.Notify] error: %v", node.getPort(), suc.getPort(), err)
 		return err
 	}
+	node.PrintNodeInfo()
 	return nil
 }
 
 func (node *Node) notify(n SingleNode) error {
+	if !node.Ping(n.Addr) {
+		return nil
+	}
 	var pre SingleNode
-	node.get_predecessor(&pre)
+	err := node.get_predecessor(&pre)
+	if err != nil {
+		logrus.Warnf("Warning! <func notify()> %v", err)
+	}
 	if pre.Addr == "" || in_range(n.ID, pre.ID, node.ID) {
 		node.set_predecessor(&n)
 	}
@@ -335,7 +398,10 @@ func (node *Node) fix_fingers() {
 func (node *Node) update_predecessor() {
 	logrus.Infof("Info <func update_predecessor()> update [%s]'s predecessor", node.getPort())
 	var pre SingleNode
-	node.get_predecessor(&pre)
+	err := node.get_predecessor(&pre)
+	if err != nil {
+		logrus.Warnf("Warning! <func update_predecessor()> %v", err)
+	}
 	if pre.Addr != "" && !node.Ping(pre.Addr) {
 		logrus.Infof("Info <func update_predecessor()> [%s]'s predecessor offline", node.getPort())
 		node.set_predecessor(&SingleNode{"", nil})
@@ -349,6 +415,7 @@ func (node *Node) update_predecessor() {
 		// How to handle backup of offline predecessor
 		// maybe in stabilize() judge is the backup of successor empty and decide put data there or not
 	}
+	node.PrintNodeInfo()
 }
 
 func (node *Node) maintainChord() {
@@ -381,8 +448,12 @@ func (node *Node) putData(pair Pair) error {
 	node.data[pair.Key] = pair.Value
 	node.dataLock.Unlock()
 	var suc SingleNode
-	node.get_successor(&suc)
-	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.PutBackupData", pair, &struct{}{})
+	err := node.get_successor(&suc)
+	if err != nil {
+		logrus.Warnf("Warning! <func putData()> %v", err)
+		return err
+	}
+	err = node.RemoteCall("tcp", suc.Addr, "RPC_Node.PutBackupData", pair, &struct{}{})
 	if err != nil {
 		logrus.Errorf("Error <func putData()> node [%s] call [%s] method [RPC_Node.PutBackupData] error: %v", node.getPort(), suc.getPort(), err)
 		return err
@@ -397,8 +468,12 @@ func (node *Node) putDataList(dataList map[string]string) error {
 	}
 	node.dataLock.Unlock()
 	var suc SingleNode
-	node.get_successor(&suc)
-	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.PutBackupDataList", dataList, &struct{}{})
+	err := node.get_successor(&suc)
+	if err != nil {
+		logrus.Warnf("Warning! <func putDataList()> %v", err)
+		return err
+	}
+	err = node.RemoteCall("tcp", suc.Addr, "RPC_Node.PutBackupDataList", dataList, &struct{}{})
 	if err != nil {
 		logrus.Errorf("Error <func putDataList()> node [%s] call [%s] method [RPC_Node.PutBackupDataList] error: %v", node.getPort(), suc.getPort(), err)
 		return err
@@ -452,8 +527,12 @@ func (node *Node) deleteData(key string) error {
 		return fmt.Errorf("no key [%s] on node [%s]'s data", key, node.getPort())
 	}
 	var suc SingleNode
-	node.get_successor(&suc)
-	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteBackupData", key, &struct{}{})
+	err := node.get_successor(&suc)
+	if err != nil {
+		logrus.Warnf("Warning! <func deletaData()> %v", err)
+		return err
+	}
+	err = node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteBackupData", key, &struct{}{})
 	if err != nil {
 		logrus.Errorf("Error <func deleteData()> node [%s] call [%s] method [RPC_Node.DeleteBackupData] error: %v", node.getPort(), suc.getPort(), err)
 		return err
@@ -468,8 +547,12 @@ func (node *Node) deleteDataList(dataList map[string]string) error {
 	}
 	node.dataLock.Unlock()
 	var suc SingleNode
-	node.get_successor(&suc)
-	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteBackupDataList", dataList, &struct{}{})
+	err := node.get_successor(&suc)
+	if err != nil {
+		logrus.Warnf("Warning! <func deleteDataList()> %v", err)
+		return err
+	}
+	err = node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteBackupDataList", dataList, &struct{}{})
 	if err != nil {
 		logrus.Errorf("Error <func deleteDataList()> node [%s] call [%s] method [RPC_Node.DeleteBackupDataList] error: %v", node.getPort(), suc.getPort(), err)
 		return err

@@ -3,19 +3,23 @@ package chord
 import (
 	"net"
 	"net/rpc"
+	"sync"
 	"sync/atomic"
 
 	"github.com/sirupsen/logrus"
 )
 
 type NodeServer struct {
-	server   *rpc.Server
-	listener net.Listener
-	shutdown atomic.Bool
+	server          *rpc.Server
+	listener        net.Listener
+	shutdown        atomic.Bool
+	connections     map[net.Conn]struct{}
+	connectionsLock sync.Mutex
 }
 
 func (ns *NodeServer) Init(node *Node) {
 	ns.server = rpc.NewServer()
+	ns.connections = make(map[net.Conn]struct{})
 	ns.server.Register(&RPC_Node{node})
 }
 
@@ -28,27 +32,41 @@ func (ns *NodeServer) TurnOn(netStr, addr string) error {
 	}
 	ns.shutdown.Store(false)
 	go func() {
-		err = ns.DialAccept()
-		if ns.shutdown.Load() {
-			logrus.Infof("Info <func TurnOn()> node [%s] shutdown", getPortFromIP(addr))
-		} else {
-			logrus.Errorf("Error <func TurnOn()> node [%s] accept error: %v", getPortFromIP(addr), err)
-		}
+		err = ns.DialAccept(addr)
 	}()
 	return nil
 }
 
-func (ns *NodeServer) DialAccept() error {
+func (ns *NodeServer) DialAccept(addr string) error {
 	for {
 		conn, err := ns.listener.Accept()
 		if err != nil {
+			if ns.shutdown.Load() {
+				logrus.Infof("Info <func DialAccept()> node [%s] shutdown", getPortFromIP(addr))
+			} else {
+				logrus.Errorf("Error <func DialAccept()> node [%s] accept error: %v", getPortFromIP(addr), err)
+			}
 			return err
 		}
-		go ns.server.ServeConn((conn))
+		ns.connectionsLock.Lock()
+		ns.connections[conn] = struct{}{}
+		ns.connectionsLock.Unlock()
+		go func() {
+			ns.server.ServeConn((conn))
+			ns.connectionsLock.Lock()
+			delete(ns.connections, conn)
+			ns.connectionsLock.Unlock()
+		}()
 	}
 }
 
 func (ns *NodeServer) TurnOff() {
-	ns.listener.Close()
 	ns.shutdown.Store(true)
+	ns.listener.Close()
+	ns.connectionsLock.Lock()
+	for conn := range ns.connections {
+		conn.Close()
+		delete(ns.connections, conn)
+	}
+	ns.connectionsLock.Unlock()
 }
