@@ -24,7 +24,7 @@ type dhtNode interface {
 	ForceQuit()
 
 	// Check whether the node identified by addr is in the network.
-	// Ping(addr string) bool
+	Ping(addr string) bool
 
 	// Put a key-value pair into the network (if key exists, update the value).
 	// Return "true" if success, "false" otherwise.
