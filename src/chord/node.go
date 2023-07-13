@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	stabilizeInterval         = 150 * time.Millisecond
-	fixFingersInterval        = 150 * time.Millisecond
-	updatePredecessorInterval = 150 * time.Millisecond
+	stabilizeInterval         = 200 * time.Millisecond
+	fixFingersInterval        = 200 * time.Millisecond
+	updatePredecessorInterval = 200 * time.Millisecond
 	successorListLength       = 5
 )
 
