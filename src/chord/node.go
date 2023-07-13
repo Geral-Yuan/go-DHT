@@ -1,10 +1,8 @@
 package chord
 
 import (
-	"fmt"
 	"math/big"
 	"os"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -97,6 +95,11 @@ func (node *Node) Join(addr string) bool {
 	node.dataLock.Lock()
 	node.RemoteCall("tcp", suc.Addr, "RPC_Node.TransferData", SingleNode{node.Addr, node.ID}, &node.data)
 	node.dataLock.Unlock()
+	node.dataLock.RLock()
+	for key := range node.data {
+		logrus.Infof("Info <func Join()> put key [%s] on node [%s]'s data", key, node.getPort())
+	}
+	node.dataLock.RUnlock()
 	node.online.Store(true)
 	node.maintainChord()
 	return true
@@ -104,8 +107,12 @@ func (node *Node) Join(addr string) bool {
 
 /*Implement method Quit() for interface dhtNode*/
 func (node *Node) Quit() {
+	if !node.online.Load() {
+		logrus.Infof("Info <func Quit()> node [%s] already quit", node.getPort())
+		return
+	}
 	logrus.Infof("Info <func Quit()> node [%s] quit", node.getPort())
-	node.PrintNodeInfo()
+	// node.PrintNodeInfo()
 	node.online.Store(false)
 	node.server.TurnOff() // Maybe here is not best
 	var suc, pre SingleNode
@@ -139,6 +146,15 @@ func (node *Node) Quit() {
 
 /*Implement method ForceQuit() for interface dhtNode*/
 func (node *Node) ForceQuit() {
+	if !node.online.Load() {
+		logrus.Infof("Info <func ForceQuit()> node [%s] already quit", node.getPort())
+		return
+	}
+	logrus.Infof("Info <func ForceQuit()> node [%s] force quit", node.getPort())
+	// node.PrintNodeInfo()
+	node.online.Store(false)
+	node.server.TurnOff()
+	node.clear()
 }
 
 func (node *Node) Ping(addr string) bool {
@@ -195,88 +211,6 @@ func (node *Node) Delete(key string) bool {
 
 // following are helper functions for interface methods and RPC methods
 
-// if id is in (begin, end) circularly then return true, o.w. return false
-func in_range(id *big.Int, begin *big.Int, end *big.Int) bool {
-	return end.Cmp(id)+id.Cmp(begin)+begin.Cmp(end) == 1 || (begin.Cmp(end) == 0 && begin.Cmp(id) != 0)
-}
-
-// return (id + (1 << i)) % (1 << M)
-func calcID(id *big.Int, i uint) *big.Int {
-	offset := new(big.Int).Lsh(big.NewInt(1), i)
-	mod := new(big.Int).Lsh(big.NewInt(1), M)
-	return new(big.Int).Mod(new(big.Int).Add(id, offset), mod)
-}
-
-func (node *Node) get_successor(res *SingleNode) error {
-	var i uint
-	for i = 0; i < successorListLength; i++ {
-		node.successorListLock.RLock()
-		*res = node.successorList[i]
-		node.successorListLock.RUnlock()
-		if res.Addr != "" && node.Ping(res.Addr) {
-			return nil
-		}
-	}
-	*res = SingleNode{}
-	return fmt.Errorf("no node in [%s]'s successorList is online", node.getPort())
-}
-
-func (node *Node) get_successorList(res *[successorListLength]SingleNode) error {
-	node.successorListLock.RLock()
-	*res = node.successorList
-	node.successorListLock.RUnlock()
-	return nil
-}
-
-func (node *Node) get_predecessor(res *SingleNode) error {
-	node.predecessorLock.RLock()
-	*res = node.predecessor
-	node.predecessorLock.RUnlock()
-	return nil
-}
-
-func (node *Node) get_finger_i(i uint, res *SingleNode) error {
-	node.fingerLock.RLock()
-	*res = node.finger[i]
-	node.fingerLock.RUnlock()
-	return nil
-}
-
-func (node *Node) set_successor(n *SingleNode) error {
-	node.successorListLock.Lock()
-	node.successorList[0] = *n
-	node.successorListLock.Unlock()
-	return nil
-}
-
-func (node *Node) add_successor(suc SingleNode) error {
-	node.set_successor(&suc)
-	node.set_finger_i(0, &suc)
-	var suc_successorList [successorListLength]SingleNode
-	node.RemoteCall("tcp", suc.Addr, "RPC_Node.Get_successorList", struct{}{}, &suc_successorList)
-	var i uint
-	node.successorListLock.Lock()
-	for i = 1; i < successorListLength; i++ {
-		node.successorList[i] = suc_successorList[i-1]
-	}
-	node.successorListLock.Unlock()
-	return nil
-}
-
-func (node *Node) set_predecessor(n *SingleNode) error {
-	node.predecessorLock.Lock()
-	node.predecessor = *n
-	node.predecessorLock.Unlock()
-	return nil
-}
-
-func (node *Node) set_finger_i(i uint, n *SingleNode) error {
-	node.fingerLock.Lock()
-	node.finger[i] = *n
-	node.fingerLock.Unlock()
-	return nil
-}
-
 func (node *Node) clear() {
 	node.dataLock.Lock()
 	node.data = make(map[string]string)
@@ -324,6 +258,7 @@ func (node *Node) closest_preceding_finger(id *big.Int) SingleNode {
 			continue
 		}
 		if !node.Ping(f.Addr) {
+			logrus.Infof("Info <func cloest_preceding_finger()> node [%s] fail to ping node [%s]", node.getPort(), f.getPort())
 			node.set_finger_i(i, &SingleNode{"", nil})
 			continue
 		}
@@ -349,13 +284,16 @@ func (node *Node) stabilize() error {
 	}
 	err = node.RemoteCall("tcp", suc.Addr, "RPC_Node.Get_predecessor", struct{}{}, &nSuc)
 	if err != nil {
-		logrus.Errorf("Error <func stabilize()> node [%s] call [%s] method [RPC_Node.Get_predecessor] error: %v", node.getPort(), suc.getPort(), err)
-		return err
+		logrus.Warnf("Warning <func stabilize()> node [%s] call [%s] method [RPC_Node.Get_predecessor] error: %v", node.getPort(), suc.getPort(), err)
 	}
 	if nSuc.Addr != "" && in_range(nSuc.ID, node.ID, suc.ID) {
 		suc = nSuc
 	}
-	node.add_successor(suc)
+	err = node.add_successor(suc)
+	if err != nil {
+		logrus.Warnf("Warning! <func stabilize()> %v", err)
+		return nil
+	}
 	err = node.RemoteCall("tcp", suc.Addr, "RPC_Node.Notify", SingleNode{node.Addr, node.ID}, &struct{}{})
 	if err != nil {
 		logrus.Errorf("Error <func stabilize()> node [%s] call [%s] method [RPC_Node.Notify] error: %v", node.getPort(), suc.getPort(), err)
@@ -367,6 +305,7 @@ func (node *Node) stabilize() error {
 
 func (node *Node) notify(n SingleNode) error {
 	if !node.Ping(n.Addr) {
+		logrus.Infof("Info <func notify()> node [%s] fail to ping node [%s]", node.getPort(), n.getPort())
 		return nil
 	}
 	var pre SingleNode
@@ -398,6 +337,7 @@ func (node *Node) update_predecessor() error {
 	var pre SingleNode
 	node.get_predecessor(&pre)
 	if pre.Addr != "" && !node.Ping(pre.Addr) {
+		logrus.Infof("Info <func update_predecessor()> node [%s] fail to ping node [%s]", node.getPort(), pre.getPort())
 		logrus.Infof("Info <func update_predecessor()> [%s]'s predecessor offline", node.getPort())
 		node.set_predecessor(&SingleNode{"", nil})
 		// now responsible for backup data of the predecessor
@@ -433,36 +373,4 @@ func (node *Node) maintainChord() {
 			time.Sleep(updatePredecessorInterval)
 		}
 	}()
-}
-
-func (node *Node) isOnline() error {
-	return nil
-}
-
-// helper functions for debugging
-
-func (node *Node) PrintNodeInfo() {
-	var suc, pre SingleNode
-	node.get_successor(&suc)
-	node.get_predecessor(&pre)
-	logrus.Infof(">>>>>>>>>> node [%s]: successor [%s], predecessor [%s] <<<<<<<<<<", node.getPort(), suc.getPort(), pre.getPort())
-}
-
-func (node *Node) PrintFingers() {
-	var f SingleNode
-	var i uint
-	for i = 0; i < M; i++ {
-		node.get_finger_i(i, &f)
-		logrus.Infof(">>>>>>>>>> finger [%d]: [%s] <<<<<<<<<<", i, f.getPort())
-	}
-}
-
-// get port number
-
-func (node *SingleNode) getPort() string {
-	return getPortFromIP(node.Addr)
-}
-
-func getPortFromIP(ip string) string {
-	return ip[strings.Index(ip, ":")+1:]
 }
