@@ -6,7 +6,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// helper functions for debugging
+// print information for debugging
 
 func (node *Node) PrintNodeInfo() {
 	var sucList [successorListLength]SingleNode

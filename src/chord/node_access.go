@@ -6,6 +6,10 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+func (node *Node) isOnline() error {
+	return nil
+}
+
 func (node *Node) get_successor(res *SingleNode) error {
 	var i uint
 	for i = 0; i < successorListLength; i++ {

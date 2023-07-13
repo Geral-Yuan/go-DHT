@@ -11,9 +11,9 @@ import (
 )
 
 const (
-	stabilizeInterval         = 200 * time.Millisecond
-	fixFingersInterval        = 200 * time.Millisecond
-	updatePredecessorInterval = 200 * time.Millisecond
+	stabilizeInterval         = 150 * time.Millisecond
+	fixFingersInterval        = 150 * time.Millisecond
+	updatePredecessorInterval = 150 * time.Millisecond
 	successorListLength       = 5
 )
 
@@ -211,18 +211,6 @@ func (node *Node) Delete(key string) bool {
 
 // following are helper functions for interface methods and RPC methods
 
-// if id is in (begin, end) circularly then return true, o.w. return false
-func in_range(id *big.Int, begin *big.Int, end *big.Int) bool {
-	return end.Cmp(id)+id.Cmp(begin)+begin.Cmp(end) == 1 || (begin.Cmp(end) == 0 && begin.Cmp(id) != 0)
-}
-
-// return (id + (1 << i)) % (1 << M)
-func calcID(id *big.Int, i uint) *big.Int {
-	offset := new(big.Int).Lsh(big.NewInt(1), i)
-	mod := new(big.Int).Lsh(big.NewInt(1), M)
-	return new(big.Int).Mod(new(big.Int).Add(id, offset), mod)
-}
-
 func (node *Node) clear() {
 	node.dataLock.Lock()
 	node.data = make(map[string]string)
@@ -385,8 +373,4 @@ func (node *Node) maintainChord() {
 			time.Sleep(updatePredecessorInterval)
 		}
 	}()
-}
-
-func (node *Node) isOnline() error {
-	return nil
 }
