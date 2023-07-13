@@ -18,13 +18,13 @@ func (rpc *RPC_Node) Get_predecessor(_ struct{}, res *SingleNode) error {
 	return rpc.node_ptr.get_predecessor(res)
 }
 
-func (rpc *RPC_Node) Set_successor(n *SingleNode, _ *struct{}) error {
-	return rpc.node_ptr.set_successor(n)
-}
+// func (rpc *RPC_Node) Set_successor(n *SingleNode, _ *struct{}) error {
+// 	return rpc.node_ptr.set_successor(n)
+// }
 
-func (rpc *RPC_Node) Set_predecessor(n *SingleNode, _ *struct{}) error {
-	return rpc.node_ptr.set_predecessor(n)
-}
+// func (rpc *RPC_Node) Set_predecessor(n *SingleNode, _ *struct{}) error {
+// 	return rpc.node_ptr.set_predecessor(n)
+// }
 
 func (rpc *RPC_Node) Stabilize(_ struct{}, _ *struct{}) error {
 	return rpc.node_ptr.stabilize()
@@ -46,9 +46,9 @@ func (rpc *RPC_Node) PutData(pair Pair, _ *struct{}) error {
 	return rpc.node_ptr.putData(pair)
 }
 
-func (rpc *RPC_Node) PutDataList(dataList map[string]string, _ *struct{}) error {
-	return rpc.node_ptr.putDataList(dataList)
-}
+// func (rpc *RPC_Node) PutDataList(dataList map[string]string, _ *struct{}) error {
+// 	return rpc.node_ptr.putDataList(dataList)
+// }
 
 func (rpc *RPC_Node) PutBackupData(pair Pair, _ *struct{}) error {
 	return rpc.node_ptr.putBackupData(pair)
@@ -70,9 +70,9 @@ func (rpc *RPC_Node) DeleteData(key string, _ *struct{}) error {
 	return rpc.node_ptr.deleteData(key)
 }
 
-func (rpc *RPC_Node) DeleteDataList(dataList map[string]string, _ *struct{}) error {
-	return rpc.node_ptr.deleteBackupDataList(dataList)
-}
+// func (rpc *RPC_Node) DeleteDataList(dataList map[string]string, _ *struct{}) error {
+// 	return rpc.node_ptr.deleteDataList(dataList)
+// }
 
 func (rpc *RPC_Node) DeleteBackupData(key string, _ *struct{}) error {
 	return rpc.node_ptr.deleteBackupData(key)
