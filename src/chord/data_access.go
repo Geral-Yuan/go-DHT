@@ -119,19 +119,17 @@ func (node *Node) deleteData(key string) error {
 }
 
 func (node *Node) deleteDataList(dataList map[string]string) error {
+	node.dataLock.Lock()
 	for key := range dataList {
-		node.dataLock.RLock()
 		_, ok := node.data[key]
-		node.dataLock.RUnlock()
 		if !ok {
 			logrus.Errorf("Error <func deleteDataList()> no key [%s] on node [%s]'s data", key, node.getPort())
 		} else {
 			logrus.Infof("Info <func deleteDataList()> delete key [%s] on node [%s]'s data", key, node.getPort())
-			node.dataLock.Lock()
 			delete(node.data, key)
-			node.dataLock.Unlock()
 		}
 	}
+	node.dataLock.Unlock()
 	var suc SingleNode
 	err := node.get_successor(&suc)
 	if err != nil {
@@ -159,28 +157,25 @@ func (node *Node) deleteBackupData(key string) error {
 }
 
 func (node *Node) deleteBackupDataList(backupDataList map[string]string) error {
+	node.backupDataLock.Lock()
 	for key := range backupDataList {
-		node.backupDataLock.RLock()
 		_, ok := node.backupData[key]
-		node.backupDataLock.RUnlock()
 		if !ok {
 			logrus.Errorf("Error <func deleteBackupDataList()> no key [%s] on node [%s]'s BackupData", key, node.getPort())
 		} else {
 			logrus.Infof("Info <func deleteBackupDataList()> delete key [%s] on node [%s]'s BackupData", key, node.getPort())
-			node.backupDataLock.Lock()
 			delete(node.backupData, key)
-			node.backupDataLock.Unlock()
 		}
 	}
+	node.backupDataLock.Unlock()
 	return nil
 }
 
 func (node *Node) transferData(pre SingleNode, pre_data *map[string]string) error {
 	node.backupData = make(map[string]string)
 	var id *big.Int
-	var node_data map[string]string
-	node.getDataList(&node_data)
-	for key, value := range node_data {
+	node.dataLock.Lock()
+	for key, value := range node.data {
 		id = Hash(key)
 		if !(in_range(id, pre.ID, node.ID) || id.Cmp(node.ID) == 0) {
 			(*pre_data)[key] = value
@@ -188,12 +183,11 @@ func (node *Node) transferData(pre SingleNode, pre_data *map[string]string) erro
 			node.backupData[key] = value
 			node.backupDataLock.Unlock()
 			logrus.Infof("Info <func transferData()> put key [%s] on node [%s]'s backupData", key, node.getPort())
-			node.dataLock.Lock()
 			delete(node.data, key)
-			node.dataLock.Unlock()
 			logrus.Infof("Info <func transferData()> delete key [%s] on node [%s]'s data", key, node.getPort())
 		}
 	}
+	node.dataLock.Unlock()
 	var suc SingleNode
 	node.get_successor(&suc)
 	node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteBackupDataList", node.backupData, &struct{}{})

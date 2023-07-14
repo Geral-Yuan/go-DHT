@@ -1,13 +1,11 @@
 package chord
 
-import "math/big"
-
 type RPC_Node struct {
 	node_ptr *Node
 }
 
-func (rpc *RPC_Node) Find_successor(id *big.Int, res *SingleNode) error {
-	return rpc.node_ptr.find_successor(id, res)
+func (rpc *RPC_Node) Find_successor(n ArgNode, res *SingleNode) error {
+	return rpc.node_ptr.find_successor(n, res)
 }
 
 func (rpc *RPC_Node) Get_successorList(_ struct{}, res *[successorListLength]SingleNode) error {
