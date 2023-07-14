@@ -178,8 +178,9 @@ func (node *Node) deleteBackupDataList(backupDataList map[string]string) error {
 func (node *Node) transferData(pre SingleNode, pre_data *map[string]string) error {
 	node.backupData = make(map[string]string)
 	var id *big.Int
-	node.dataLock.Lock()
-	for key, value := range node.data {
+	var node_data map[string]string
+	node.getDataList(&node_data)
+	for key, value := range node_data {
 		id = Hash(key)
 		if !(in_range(id, pre.ID, node.ID) || id.Cmp(node.ID) == 0) {
 			(*pre_data)[key] = value
@@ -187,11 +188,12 @@ func (node *Node) transferData(pre SingleNode, pre_data *map[string]string) erro
 			node.backupData[key] = value
 			node.backupDataLock.Unlock()
 			logrus.Infof("Info <func transferData()> put key [%s] on node [%s]'s backupData", key, node.getPort())
+			node.dataLock.Lock()
 			delete(node.data, key)
+			node.dataLock.Unlock()
 			logrus.Infof("Info <func transferData()> delete key [%s] on node [%s]'s data", key, node.getPort())
 		}
 	}
-	node.dataLock.Unlock()
 	var suc SingleNode
 	node.get_successor(&suc)
 	node.RemoteCall("tcp", suc.Addr, "RPC_Node.DeleteBackupDataList", node.backupData, &struct{}{})
