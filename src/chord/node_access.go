@@ -65,7 +65,10 @@ func (node *Node) add_successor(suc SingleNode) error {
 	node.set_successor(&suc)
 	node.set_finger_i(0, &suc)
 	var suc_successorList [successorListLength]SingleNode
-	node.RemoteCall("tcp", suc.Addr, "RPC_Node.Get_successorList", struct{}{}, &suc_successorList)
+	err := node.RemoteCall("tcp", suc.Addr, "RPC_Node.Get_successorList", struct{}{}, &suc_successorList)
+	if err != nil {
+		return err
+	}
 	var i uint
 	node.successorListLock.Lock()
 	for i = 1; i < successorListLength; i++ {

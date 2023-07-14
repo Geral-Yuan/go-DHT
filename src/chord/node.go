@@ -328,6 +328,7 @@ func (node *Node) fix_fingers() {
 	node.get_finger_i(node.fingerFixIndex, &f)
 	if nf.Addr != f.Addr {
 		node.set_finger_i(node.fingerFixIndex, &nf)
+		logrus.Infof("Info <func fix_fingers()> set [%s]'s %dth finger as [%s]", node.getPort(), node.fingerFixIndex, nf.getPort())
 	}
 	node.fingerFixIndex = (node.fingerFixIndex + 1) % M
 }
