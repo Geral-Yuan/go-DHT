@@ -1,32 +1,17 @@
 package chord
 
 import (
-	"net"
 	"net/rpc"
-	"time"
 
 	"github.com/sirupsen/logrus"
 )
 
-const (
-	// dialTimes             = 3
-	dialDuration = 500 * time.Millisecond
-	// dialFailSleepDuration = 200 * time.Millisecond
-)
-
 func (node *Node) GetClient(netStr, addr string) (*rpc.Client, error) {
-	var conn net.Conn
-	var err error
-	// for i := 0; i < dialTimes; i++ {
-	conn, err = net.DialTimeout(netStr, addr, dialDuration)
-	if err == nil {
-		client := rpc.NewClient(conn)
-		return client, nil
+	client, err := rpc.Dial(netStr, addr)
+	if err != nil {
+		return nil, err
 	}
-	logrus.Infof("Info <func GetClient()> find node [%s] shutdown when dialing it", getPortFromIP(addr))
-	// 	time.Sleep(dialFailSleepDuration)
-	// }
-	return nil, err
+	return client, nil
 }
 
 func (node *Node) RemoteCall(netStr, addr, method string, args, reply interface{}) error {

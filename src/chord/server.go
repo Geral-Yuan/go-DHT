@@ -31,13 +31,11 @@ func (ns *NodeServer) TurnOn(netStr, addr string) error {
 		return err
 	}
 	ns.shutdown.Store(false)
-	go func() {
-		err = ns.DialAccept(addr)
-	}()
+	go ns.DialAccept(addr)
 	return nil
 }
 
-func (ns *NodeServer) DialAccept(addr string) error {
+func (ns *NodeServer) DialAccept(addr string) {
 	for {
 		conn, err := ns.listener.Accept()
 		if err != nil {
@@ -46,7 +44,7 @@ func (ns *NodeServer) DialAccept(addr string) error {
 			} else {
 				logrus.Errorf("Error <func DialAccept()> node [%s] accept error: %v", getPortFromIP(addr), err)
 			}
-			return err
+			return
 		}
 		ns.connectionsLock.Lock()
 		ns.connections[conn] = struct{}{}

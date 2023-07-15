@@ -11,7 +11,7 @@ func (node *Node) putData(pair Pair) error {
 	node.dataLock.Lock()
 	node.data[pair.Key] = pair.Value
 	node.dataLock.Unlock()
-	logrus.Infof("Info <func putData()> put key [%s] on node [%s]'s data", pair.Key, node.getPort())
+	// logrus.Infof("Info <func putData()> put key [%s] on node [%s]'s data", pair.Key, node.getPort())
 	var suc SingleNode
 	err := node.get_successor(&suc)
 	if err != nil {
@@ -32,9 +32,9 @@ func (node *Node) putDataList(dataList map[string]string) error {
 		node.data[key] = value
 	}
 	node.dataLock.Unlock()
-	for key := range dataList {
-		logrus.Infof("Info <func putDataList()> put key [%s] on node [%s]'s data", key, node.getPort())
-	}
+	// for key := range dataList {
+	// 	logrus.Infof("Info <func putDataList()> put key [%s] on node [%s]'s data", key, node.getPort())
+	// }
 	var suc SingleNode
 	err := node.get_successor(&suc)
 	if err != nil {
@@ -53,7 +53,7 @@ func (node *Node) putBackupData(pair Pair) error {
 	node.backupDataLock.Lock()
 	node.backupData[pair.Key] = pair.Value
 	node.backupDataLock.Unlock()
-	logrus.Infof("Info <func putBackupData()> put key [%s] on node [%s]'s backupData", pair.Key, node.getPort())
+	// logrus.Infof("Info <func putBackupData()> put key [%s] on node [%s]'s backupData", pair.Key, node.getPort())
 	return nil
 }
 
@@ -63,9 +63,9 @@ func (node *Node) putBackupDataList(backupDataList map[string]string) error {
 		node.backupData[key] = value
 	}
 	node.backupDataLock.Unlock()
-	for key := range backupDataList {
-		logrus.Infof("Info <func putbackupDataList()> put key [%s] on node [%s]'s backupData", key, node.getPort())
-	}
+	// for key := range backupDataList {
+	// 	logrus.Infof("Info <func putbackupDataList()> put key [%s] on node [%s]'s backupData", key, node.getPort())
+	// }
 	return nil
 }
 
@@ -75,7 +75,7 @@ func (node *Node) getData(key string, value *string) error {
 	*value, ok = node.data[key]
 	node.dataLock.RUnlock()
 	if !ok {
-		logrus.Infof("Info <func getData()> no key [%s] on node [%s]'s data", key, node.getPort())
+		logrus.Errorf("Info <func getData()> no key [%s] on node [%s]'s data", key, node.getPort())
 		return fmt.Errorf("no key [%s] on node [%s]'s data when getting", key, node.getPort())
 	}
 	return nil
@@ -103,7 +103,7 @@ func (node *Node) deleteData(key string) error {
 	if !ok {
 		return fmt.Errorf("no key [%s] on node [%s]'s data", key, node.getPort())
 	}
-	logrus.Infof("Info <func deleteData()> delete key [%s] on node [%s]'s data", key, node.getPort())
+	// logrus.Infof("Info <func deleteData()> delete key [%s] on node [%s]'s data", key, node.getPort())
 	var suc SingleNode
 	err := node.get_successor(&suc)
 	if err != nil {
@@ -125,7 +125,7 @@ func (node *Node) deleteDataList(dataList map[string]string) error {
 		if !ok {
 			logrus.Errorf("Error <func deleteDataList()> no key [%s] on node [%s]'s data", key, node.getPort())
 		} else {
-			logrus.Infof("Info <func deleteDataList()> delete key [%s] on node [%s]'s data", key, node.getPort())
+			// logrus.Infof("Info <func deleteDataList()> delete key [%s] on node [%s]'s data", key, node.getPort())
 			delete(node.data, key)
 		}
 	}
@@ -152,7 +152,7 @@ func (node *Node) deleteBackupData(key string) error {
 	if !ok {
 		return fmt.Errorf("no key [%s] on node [%s]'s backupData", key, node.getPort())
 	}
-	logrus.Infof("Info <func deleteBackupData()> delete key [%s] on node [%s]'s backupData", key, node.getPort())
+	// logrus.Infof("Info <func deleteBackupData()> delete key [%s] on node [%s]'s backupData", key, node.getPort())
 	return nil
 }
 
@@ -163,7 +163,7 @@ func (node *Node) deleteBackupDataList(backupDataList map[string]string) error {
 		if !ok {
 			logrus.Errorf("Error <func deleteBackupDataList()> no key [%s] on node [%s]'s BackupData", key, node.getPort())
 		} else {
-			logrus.Infof("Info <func deleteBackupDataList()> delete key [%s] on node [%s]'s BackupData", key, node.getPort())
+			// logrus.Infof("Info <func deleteBackupDataList()> delete key [%s] on node [%s]'s BackupData", key, node.getPort())
 			delete(node.backupData, key)
 		}
 	}
@@ -182,9 +182,9 @@ func (node *Node) transferData(pre SingleNode, pre_data *map[string]string) erro
 			node.backupDataLock.Lock()
 			node.backupData[key] = value
 			node.backupDataLock.Unlock()
-			logrus.Infof("Info <func transferData()> put key [%s] on node [%s]'s backupData", key, node.getPort())
+			// logrus.Infof("Info <func transferData()> put key [%s] on node [%s]'s backupData", key, node.getPort())
 			delete(node.data, key)
-			logrus.Infof("Info <func transferData()> delete key [%s] on node [%s]'s data", key, node.getPort())
+			// logrus.Infof("Info <func transferData()> delete key [%s] on node [%s]'s data", key, node.getPort())
 		}
 	}
 	node.dataLock.Unlock()

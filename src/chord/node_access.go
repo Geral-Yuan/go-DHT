@@ -2,8 +2,6 @@ package chord
 
 import (
 	"fmt"
-
-	"github.com/sirupsen/logrus"
 )
 
 func (node *Node) isOnline() error {
@@ -18,9 +16,10 @@ func (node *Node) get_successor(res *SingleNode) error {
 		node.successorListLock.RUnlock()
 		if res.Addr != "" && node.Ping(res.Addr) {
 			return nil
-		} else {
-			logrus.Infof("Info <func get_successor()> node [%s] fail to ping node [%s]", node.getPort(), res.getPort())
 		}
+		// else {
+		// 	logrus.Infof("Info <func get_successor()> node [%s] fail to ping node [%s]", node.getPort(), res.getPort())
+		// }
 	}
 	*res = SingleNode{"", nil}
 	return fmt.Errorf("no node in [%s]'s successorList is online", node.getPort())
